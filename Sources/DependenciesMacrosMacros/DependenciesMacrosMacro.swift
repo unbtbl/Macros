@@ -4,14 +4,17 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftDiagnostics
 
-public struct AutoDependency {}
+public struct AutoDependency {
+    var declaration: DeclGroupSyntax
+    var identifier: TokenSyntax
+    var protocolName: String {
+        "\(identifier.text)Protocol"
+    }
 
-extension AutoDependency: PeerMacro {
-    public static func expansion(
-        of node: AttributeSyntax,
-        providingPeersOf declaration: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
+    init(
+        node: AttributeSyntax,
+        declaration: some SyntaxProtocol
+    ) throws {
         guard
             let group = declaration.asProtocol(DeclGroupSyntax.self),
             let identifier = declaration.asProtocol(IdentifiedDeclSyntax.self)?.identifier,
@@ -25,26 +28,51 @@ extension AutoDependency: PeerMacro {
             )
         }
 
-        let body = try MemberDeclListSyntax {
-            for member in group.memberBlock.members {
+        self.declaration = group
+        self.identifier = identifier
+    }
+
+    func generateProtocol() -> DeclSyntax {
+        let body = MemberDeclListSyntax {
+            for member in declaration.memberBlock.members {
                 if let convertible = member.decl.asProtocol(ProtocolRequirementConvertibleSyntax.self) {
-                    try convertible.asProtocolRequirement()
+                    try! convertible.asProtocolRequirement()
                 }
             }
         }.trimmed
 
+        return """
+        protocol \(raw: protocolName): AnyObject {
+            \(body)
+        }
+        """
+    }
+}
+
+extension AutoDependency: PeerMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingPeersOf declaration: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        let instance = try Self(node: node, declaration: declaration)
+
         return [
-            """
-            protocol \(raw: identifier.text)Protocol {
-                \(body)
-            }
-            """
+            instance.generateProtocol()
         ]
     }
 }
 
+extension AutoDependency: ConformanceMacro {
+    public static func expansion(of node: AttributeSyntax, providingConformancesOf declaration: some DeclGroupSyntax, in context: some MacroExpansionContext) throws -> [(TypeSyntax, GenericWhereClauseSyntax?)] {
+        let instance = try Self(node: node, declaration: declaration)
+
+        return [ ( "\(raw: instance.protocolName)", nil) ]
+    }
+}
+
 enum DependenciesMacroDiagnostic {
-    case unsupportedType(DeclSyntaxProtocol)
+    case unsupportedType(SyntaxProtocol)
 }
 
 extension DependenciesMacroDiagnostic: DiagnosticMessage {

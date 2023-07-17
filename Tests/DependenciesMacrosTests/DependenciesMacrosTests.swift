@@ -39,6 +39,8 @@ final class DependenciesMacrosTests: XCTestCase {
                     return _foo()
                 }
             }
+            extension MyDependency: MyDependencyProtocol {
+            }
             """,
             macros: DependenciesMacrosPlugin.macros
         )
