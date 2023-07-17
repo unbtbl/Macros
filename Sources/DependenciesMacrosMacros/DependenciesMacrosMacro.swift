@@ -7,7 +7,6 @@ import SwiftDiagnostics
 enum DependencyKind {
     case `class`
     case `struct`
-    case `enum`
     case `actor`
 }
 
@@ -16,6 +15,9 @@ public struct AutoDependency {
     var identifier: TokenSyntax
     var protocolName: String {
         "\(identifier.text)Protocol"
+    }
+    var mockName: String {
+        "\(identifier.text)Mock"
     }
     var dependencyKind: DependencyKind
 
@@ -41,8 +43,6 @@ public struct AutoDependency {
             self.dependencyKind = .class
         } else if declaration.is(StructDeclSyntax.self) {
             self.dependencyKind = .struct
-        } else if declaration.is(EnumDeclSyntax.self) {
-            self.dependencyKind = .enum
         } else if declaration.is(ActorDeclSyntax.self) {
             self.dependencyKind = .actor
         } else {
@@ -74,6 +74,42 @@ public struct AutoDependency {
         return protocolDecl
             .with(\.inheritanceClause, inheritanceClause.inheritedTypeCollection.isEmpty ? nil : inheritanceClause)
     }
+
+    func generateMock() throws -> DeclSyntaxProtocol {
+        let inheritanceClause = TypeInheritanceClauseSyntax {
+            InheritedTypeSyntax(typeName: "\(raw: protocolName)" as TypeSyntax)
+        }
+
+        let membersBlock = MemberDeclBlockSyntax(members: try mockMembers())
+
+        let decl: DeclSyntaxProtocol = switch dependencyKind {
+        case .class:
+            ClassDeclSyntax(
+                identifier: .identifier(mockName),
+                inheritanceClause: inheritanceClause,
+                memberBlock: membersBlock
+            )
+        case .struct:
+            StructDeclSyntax(
+                identifier: .identifier(mockName),
+                inheritanceClause: inheritanceClause,
+                memberBlock: membersBlock
+            )
+        case .actor:
+            ActorDeclSyntax(
+                identifier: .identifier(mockName),
+                inheritanceClause: inheritanceClause,
+                memberBlock: membersBlock
+            )
+        }
+
+        return decl
+    }
+
+    @MemberDeclListBuilder
+    func mockMembers() throws -> MemberDeclListSyntax {
+        // TODO
+    }
 }
 
 extension AutoDependency: PeerMacro {
@@ -85,7 +121,8 @@ extension AutoDependency: PeerMacro {
         let instance = try Self(node: node, declaration: declaration)
 
         return try [
-            instance.generateProtocol().as(DeclSyntax.self)!
+            instance.generateProtocol().as(DeclSyntax.self),
+            instance.generateMock().as(DeclSyntax.self)
         ]
     }
 }
@@ -94,7 +131,13 @@ extension AutoDependency: ConformanceMacro {
     public static func expansion(of node: AttributeSyntax, providingConformancesOf declaration: some DeclGroupSyntax, in context: some MacroExpansionContext) throws -> [(TypeSyntax, GenericWhereClauseSyntax?)] {
         let instance = try Self(node: node, declaration: declaration)
 
-        return [ ( "\(raw: instance.protocolName)", nil) ]
+        return [("\(raw: instance.protocolName)", nil)]
+    }
+}
+
+extension DeclSyntaxProtocol {
+    func `as`(_: DeclSyntax.Type) -> DeclSyntax {
+        DeclSyntax(self)
     }
 }
 

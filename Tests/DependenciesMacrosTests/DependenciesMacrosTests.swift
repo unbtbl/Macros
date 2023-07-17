@@ -32,7 +32,7 @@ final class DependenciesMacrosTests: XCTestCase {
             protocol MyDependencyProtocol : AnyObject {
                 func foo() -> String
             }
-            final class MyDependencyMock : MyDependencyProtocol {
+            class MyDependencyMock: MyDependencyProtocol {
                 var _foo: () -> String = unimplemented()
 
                 func foo() -> String {
