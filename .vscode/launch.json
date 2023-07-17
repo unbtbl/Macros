@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "sourceLanguages": [
+                "swift"
+            ],
+            "name": "Debug DependenciesMacrosClient",
+            "program": "${workspaceFolder:DependenciesMacros}/.build/debug/DependenciesMacrosClient",
+            "args": [],
+            "cwd": "${workspaceFolder:DependenciesMacros}",
+            "preLaunchTask": "swift: Build Debug DependenciesMacrosClient"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "sourceLanguages": [
+                "swift"
+            ],
+            "name": "Release DependenciesMacrosClient",
+            "program": "${workspaceFolder:DependenciesMacros}/.build/release/DependenciesMacrosClient",
+            "args": [],
+            "cwd": "${workspaceFolder:DependenciesMacros}",
+            "preLaunchTask": "swift: Build Release DependenciesMacrosClient"
+        }
+    ]
+}

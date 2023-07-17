@@ -1,34 +1,60 @@
 import SwiftSyntaxMacros
 import SwiftSyntaxMacrosTestSupport
 import XCTest
-import DependenciesMacrosMacros
-
-let testMacros: [String: Macro.Type] = [
-    "stringify": StringifyMacro.self,
-]
+@testable import DependenciesMacrosMacros
 
 final class DependenciesMacrosTests: XCTestCase {
+    // TODO: escaping sendable
+    // TODO: private(set)
+    // TODO: inits? -> skip
+    // TODO: fileprivate
+    // TODO: Public test case
+    // TODO: some arguments
+    // TODO: some return type
+    // TODO: Protocol inheritance
+
     func testMacro() {
         assertMacroExpansion(
             """
-            #stringify(a + b)
+            @AutoDependency
+            final class MyDependency {
+                func foo() -> String {
+                    return "bar"
+                }
+            }
             """,
             expandedSource: """
-            (a + b, "a + b")
+            final class MyDependency {
+                func foo() -> String {
+                    return "bar"
+                }
+            }
+            protocol MyDependencyProtocol {
+                func foo() -> String
+            }
             """,
-            macros: testMacros
+            macros: DependenciesMacrosPlugin.macros
         )
     }
 
-    func testMacroWithStringLiteral() {
+    func testForDumpingSyntaxTree() {
         assertMacroExpansion(
-            #"""
-            #stringify("Hello, \(name)")
-            """#,
-            expandedSource: #"""
-            ("Hello, \(name)", #""Hello, \(name)""#)
-            """#,
-            macros: testMacros
+            """
+            @DumpSyntax
+            public protocol HenkProtocol {
+                var isAdmin: Bool { get }
+            }
+            @DumpSyntax
+            public class Henk {
+                var implicit = Date(timeIntervalSinceReferenceDate: 200)
+            }
+            """,
+            expandedSource: "",
+            macros: ["DumpSyntax": DumpSyntaxMacro.self]
         )
     }
+}
+
+class Henk {
+    var date = Date()
 }
