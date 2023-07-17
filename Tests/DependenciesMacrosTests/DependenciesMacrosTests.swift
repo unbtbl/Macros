@@ -29,10 +29,10 @@ final class DependenciesMacrosTests: XCTestCase {
                     return "bar"
                 }
             }
-            protocol MyDependencyProtocol: AnyObject {
+            protocol MyDependencyProtocol : AnyObject {
                 func foo() -> String
             }
-            final class MyDependencyMock: MyDependencyProtocol {
+            final class MyDependencyMock : MyDependencyProtocol {
                 var _foo: () -> String = unimplemented()
 
                 func foo() -> String {

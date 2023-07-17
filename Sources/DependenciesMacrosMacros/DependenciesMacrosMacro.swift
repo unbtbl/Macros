@@ -4,12 +4,20 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftDiagnostics
 
+enum DependencyKind {
+    case `class`
+    case `struct`
+    case `enum`
+    case `actor`
+}
+
 public struct AutoDependency {
     var declaration: DeclGroupSyntax
     var identifier: TokenSyntax
     var protocolName: String {
         "\(identifier.text)Protocol"
     }
+    var dependencyKind: DependencyKind
 
     init(
         node: AttributeSyntax,
@@ -17,9 +25,7 @@ public struct AutoDependency {
     ) throws {
         guard
             let group = declaration.asProtocol(DeclGroupSyntax.self),
-            let identifier = declaration.asProtocol(IdentifiedDeclSyntax.self)?.identifier,
-            !declaration.is(ExtensionDeclSyntax.self),
-            !declaration.is(ProtocolDeclSyntax.self)
+            let identifier = declaration.asProtocol(IdentifiedDeclSyntax.self)?.identifier
         else {
             throw DiagnosticsError(
                 diagnostics: [
@@ -30,22 +36,43 @@ public struct AutoDependency {
 
         self.declaration = group
         self.identifier = identifier
+
+        if declaration.is(ClassDeclSyntax.self) {
+            self.dependencyKind = .class
+        } else if declaration.is(StructDeclSyntax.self) {
+            self.dependencyKind = .struct
+        } else if declaration.is(EnumDeclSyntax.self) {
+            self.dependencyKind = .enum
+        } else if declaration.is(ActorDeclSyntax.self) {
+            self.dependencyKind = .actor
+        } else {
+            throw DiagnosticsError(
+                diagnostics: [
+                    DependenciesMacroDiagnostic.unsupportedType(declaration).at(Syntax(node))
+                ]
+            )
+        }
     }
 
-    func generateProtocol() -> DeclSyntax {
-        let body = MemberDeclListSyntax {
+    func generateProtocol() throws -> ProtocolDeclSyntax {
+        let protocolDecl = try ProtocolDeclSyntax("protocol \(raw: protocolName)") {
             for member in declaration.memberBlock.members {
                 if let convertible = member.decl.asProtocol(ProtocolRequirementConvertibleSyntax.self) {
-                    try! convertible.asProtocolRequirement()
+                    try convertible.asProtocolRequirement()
                 }
             }
-        }.trimmed
-
-        return """
-        protocol \(raw: protocolName): AnyObject {
-            \(body)
         }
-        """
+
+        let inheritanceClause = TypeInheritanceClauseSyntax {
+            if dependencyKind == .class {
+                InheritedTypeSyntax(typeName: "AnyObject" as TypeSyntax)
+            } else if dependencyKind == .actor {
+                InheritedTypeSyntax(typeName: "AnyActor" as TypeSyntax)
+            }
+        }
+
+        return protocolDecl
+            .with(\.inheritanceClause, inheritanceClause.inheritedTypeCollection.isEmpty ? nil : inheritanceClause)
     }
 }
 
@@ -57,8 +84,8 @@ extension AutoDependency: PeerMacro {
     ) throws -> [DeclSyntax] {
         let instance = try Self(node: node, declaration: declaration)
 
-        return [
-            instance.generateProtocol()
+        return try [
+            instance.generateProtocol().as(DeclSyntax.self)!
         ]
     }
 }
