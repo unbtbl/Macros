@@ -29,15 +29,22 @@ final class DependenciesMacrosTests: XCTestCase {
                     return "bar"
                 }
             }
-            protocol MyDependencyProtocol {
+            protocol MyDependencyProtocol: AnyObject {
                 func foo() -> String
+            }
+            final class MyDependencyMock: MyDependencyProtocol {
+                var _foo: () -> String = unimplemented()
+
+                func foo() -> String {
+                    return _foo()
+                }
             }
             """,
             macros: DependenciesMacrosPlugin.macros
         )
     }
 
-    func testForDumpingSyntaxTree() {
+    func testForDumpingSyntaxTree() throws {
         assertMacroExpansion(
             """
             @DumpSyntax
@@ -53,8 +60,4 @@ final class DependenciesMacrosTests: XCTestCase {
             macros: ["DumpSyntax": DumpSyntaxMacro.self]
         )
     }
-}
-
-class Henk {
-    var date = Date()
 }
