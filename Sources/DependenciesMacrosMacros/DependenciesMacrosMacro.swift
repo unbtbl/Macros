@@ -80,7 +80,11 @@ public struct AutoDependency {
             InheritedTypeSyntax(typeName: "\(raw: protocolName)" as TypeSyntax)
         }
 
-        let membersBlock = MemberDeclBlockSyntax(members: try mockMembers())
+        var members = try mockMembers()
+        let initializer = initializer(for: members.map(\.decl))
+        members = members.appending(MemberDeclListItemSyntax(decl: initializer))
+
+        let membersBlock = MemberDeclBlockSyntax(members: members)
 
         let decl: DeclSyntaxProtocol = switch dependencyKind {
         case .class:
@@ -137,6 +141,49 @@ public struct AutoDependency {
                 }
             }
         }
+    }
+
+    func initializer<S: Sequence>(for members: S) -> InitializerDeclSyntax where S.Element: DeclSyntaxProtocol {
+        let parametersAndCodeBlockItems: [(parameter: FunctionParameterSyntax, codeBlockItem: CodeBlockItemSyntax)] = members
+            .compactMap { (member) -> (FunctionParameterSyntax, CodeBlockItemSyntax)? in
+                guard
+                    let variable = member.as(VariableDeclSyntax.self),
+                    let binding = variable.bindings.first,
+                    let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier,
+                    let type = binding.typeAnnotation?.type
+                else {
+                    return nil
+                }
+
+                // Remove the _ prefix from the identifier if it exists
+                let trimmedIdentifier = identifier.text.hasPrefix("_")
+                    ? .identifier(String(identifier.text.dropFirst()))
+                    : identifier
+
+                // Add @escaping to the type if it's a function type
+                let annotatedType: TypeSyntax = if let functionType = type.as(FunctionTypeSyntax.self) {
+                    "@escaping \(functionType)"
+                } else {
+                    type
+                }
+
+                let parameter = FunctionParameterSyntax(
+                    firstName: trimmedIdentifier,
+                    type: annotatedType,
+                    defaultArgument: binding.initializer
+                )
+
+                let codeBlockItem: CodeBlockItemSyntax = "self.\(identifier) = \(trimmedIdentifier)"
+
+                return (parameter, codeBlockItem)
+            }
+
+        return InitializerDeclSyntax(
+            signature: FunctionSignatureSyntax(
+                input: ParameterClauseSyntax(parameterList: .init(parametersAndCodeBlockItems.map(\.parameter)))
+            ),
+            body: CodeBlockSyntax(statements: CodeBlockItemListSyntax(parametersAndCodeBlockItems.map(\.codeBlockItem)))
+        )
     }
 }
 

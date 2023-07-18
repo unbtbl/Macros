@@ -37,6 +37,9 @@ final class DependenciesMacrosTests: XCTestCase {
                 func foo() -> String {
                     return _foo()
                 }
+                init(foo: @escaping () -> String = unimplemented()) {
+                    self._foo = foo
+                }
             }
             extension MyDependency: MyDependencyProtocol {
             }
