@@ -108,7 +108,19 @@ public struct AutoDependency {
 
     @MemberDeclListBuilder
     func mockMembers() throws -> MemberDeclListSyntax {
-        // TODO
+        // For each func in the declaration, generate a mock implementation relying on a closure
+        for member in declaration.memberBlock.members {
+            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+                VariableDeclSyntax(
+                    bindingKeyword: .keyword(.var)
+                ) {
+                    PatternBindingSyntax(
+                        pattern: "_\(raw: funcDecl.identifier.text)" as PatternSyntax,
+                        typeAnnotation: TypeAnnotationSyntax(type: funcDecl.signature.asFunctionType())
+                    )
+                }
+            }
+        }
     }
 }
 
