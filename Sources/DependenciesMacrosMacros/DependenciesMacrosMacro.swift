@@ -111,13 +111,29 @@ public struct AutoDependency {
         // For each func in the declaration, generate a mock implementation relying on a closure
         for member in declaration.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+                let closureVariableIdentifier = "_\(funcDecl.identifier.text)"
+
                 VariableDeclSyntax(
                     bindingKeyword: .keyword(.var)
                 ) {
                     PatternBindingSyntax(
-                        pattern: "_\(raw: funcDecl.identifier.text)" as PatternSyntax,
-                        typeAnnotation: TypeAnnotationSyntax(type: funcDecl.signature.asFunctionType())
+                        pattern: "\(raw: closureVariableIdentifier)" as PatternSyntax,
+                        typeAnnotation: TypeAnnotationSyntax(type: funcDecl.signature.asFunctionType()),
+                        initializer: InitializerClauseSyntax(
+                            value: "unimplemented()" as ExprSyntax
+                        )
                     )
+                }
+
+                FunctionDeclSyntax(
+                    attributes: funcDecl.attributes,
+                    modifiers: funcDecl.modifiers,
+                    identifier: funcDecl.identifier,
+                    genericParameterClause: funcDecl.genericParameterClause,
+                    signature: funcDecl.signature,
+                    genericWhereClause: funcDecl.genericWhereClause
+                ) {
+                    "return \(raw: closureVariableIdentifier)()"
                 }
             }
         }

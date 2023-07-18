@@ -34,7 +34,6 @@ final class DependenciesMacrosTests: XCTestCase {
             }
             class MyDependencyMock: MyDependencyProtocol {
                 var _foo: () -> String = unimplemented()
-
                 func foo() -> String {
                     return _foo()
                 }
