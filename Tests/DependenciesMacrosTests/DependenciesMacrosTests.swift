@@ -329,7 +329,7 @@ final class DependenciesMacrosTests: XCTestCase {
             protocol MyDependencyProtocol : AnyObject, Sendable {
                 func foo(bar: String, baz: Int) async throws -> String
             }
-            class MyDependencyMock: MyDependencyProtocol {
+            class MyDependencyMock: MyDependencyProtocol, @unchecked Sendable {
                 var _foo: (String, Int) async throws -> String = unimplemented()
                 func foo(bar: String, baz: Int) async throws -> String {
                     return try await _foo(bar, baz)

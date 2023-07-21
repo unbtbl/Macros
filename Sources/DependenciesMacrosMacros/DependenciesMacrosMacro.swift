@@ -101,6 +101,11 @@ public struct AutoDependencyMacro {
     func generateMock() throws -> DeclSyntaxProtocol {
         let inheritanceClause = TypeInheritanceClauseSyntax {
             InheritedTypeSyntax(typeName: "\(raw: protocolName)" as TypeSyntax)
+
+            if dependencyKind == .class, declarationIsSendable {
+                // Add @unchecked Sendable
+                InheritedTypeSyntax(typeName: "@unchecked Sendable" as TypeSyntax)
+            }
         }
 
         var members = try mockMembers()
