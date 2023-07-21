@@ -97,6 +97,76 @@ internal struct EnumCase {
 }
 
 public struct EnumCodableMacro: MemberMacro {
+    var declaration: DeclGroupSyntax
+    private var cases: [EnumCase]
+
+    func generateSubTypeEnum(context: some MacroExpansionContext) -> EnumDeclSyntax {
+        try! EnumDeclSyntax("enum SubType: String, Codable") {
+            MemberDeclListItemSyntax(decl: EnumCaseDeclSyntax {
+                for enumCase in self.cases {
+                    EnumCaseElementSyntax(identifier: enumCase.identifier)
+                }
+            })
+        }
+    }
+
+    func generateCodingKeysEnum(context: some MacroExpansionContext) -> EnumDeclSyntax {
+        let uniqueAssociatedValues = self.cases.reduce(into: Set<TokenSyntax>()) { codingKeys, enumCase in
+            if let associatedValues = enumCase.associatedValues {
+                for associatedValue in associatedValues {
+                    codingKeys.insert(associatedValue.firstName)
+                }
+            }
+        }
+
+        return try! EnumDeclSyntax("private enum CodingKeys: String, CodingKey") {
+            MemberDeclListItemSyntax(decl: EnumCaseDeclSyntax {
+                EnumCaseElementSyntax(identifier: "type")
+
+                for associatedValue in uniqueAssociatedValues {
+                    EnumCaseElementSyntax(identifier: associatedValue)
+                }
+            })
+        }
+    }
+
+    func generateEncodeFunction(context: some MacroExpansionContext) -> FunctionDeclSyntax {
+        let encodeCases = self.cases.map { enumCase -> SwitchCaseSyntax in
+            let encodeLabel = SwitchCaseLabelSyntax {
+                if let tupleExpression = enumCase.tupleExpression {
+                    CaseItemSyntax(pattern: ExpressionPatternSyntax(expression: FunctionCallExprSyntax(
+                        calledExpression: MemberAccessExprSyntax(name: enumCase.identifier),
+                        argumentList: tupleExpression.elementList
+                    )))
+                } else {
+                    CaseItemSyntax(pattern: ExpressionPatternSyntax(expression: MemberAccessExprSyntax(name: enumCase.identifier)))
+                }
+            }
+
+            return SwitchCaseSyntax(label: .case(encodeLabel), statements: CodeBlockItemListSyntax {
+                "try container.encode(SubType.\(enumCase.identifier), forKey: .type)"
+
+                if let associatedValues = enumCase.associatedValues {
+                    for associatedValue in associatedValues {
+                        "try container.encode(\(associatedValue.firstName), forKey: .\(associatedValue.firstName))"
+                    }
+                }
+            })
+        }
+
+        return try! FunctionDeclSyntax("public func encode(to encoder: Encoder) throws") {
+            "var container = encoder.container(keyedBy: CodingKeys.self)"
+
+            SwitchExprSyntax(expression: "self" as ExprSyntax) {
+                for encodeCase in encodeCases {
+                    encodeCase
+                }
+            }
+        }
+    }
+
+    func generateDecodeFunction(
+    
     public static func expansion(
         of node: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
