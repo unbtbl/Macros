@@ -161,9 +161,16 @@ public struct AutoDependencyMacro {
         let variableDecl = VariableDeclSyntax(
             bindingKeyword: .keyword(.var)
         ) {
+            let functionType = funcDecl.signature.asFunctionType()
+            let type: TypeSyntax = if declarationIsSendable {
+                "@Sendable \(functionType)"
+            } else {
+                TypeSyntax(functionType)
+            }
+            
             PatternBindingSyntax(
                 pattern: "\(raw: closureVariableIdentifier)" as PatternSyntax,
-                typeAnnotation: TypeAnnotationSyntax(type: funcDecl.signature.asFunctionType()),
+                typeAnnotation: TypeAnnotationSyntax(type: type),
                 initializer: InitializerClauseSyntax(
                     value: "unimplemented()" as ExprSyntax
                 )
@@ -226,6 +233,8 @@ public struct AutoDependencyMacro {
                 // Add @escaping to the type if it's a function type
                 let annotatedType: TypeSyntax = if let functionType = type.as(FunctionTypeSyntax.self) {
                     "@escaping \(functionType)"
+                } else if let attributedType = type.as(AttributedTypeSyntax.self), attributedType.baseType.is(FunctionTypeSyntax.self) {
+                    "@escaping \(attributedType)"
                 } else {
                     type
                 }

@@ -330,11 +330,11 @@ final class DependenciesMacrosTests: XCTestCase {
                 func foo(bar: String, baz: Int) async throws -> String
             }
             class MyDependencyMock: MyDependencyProtocol, @unchecked Sendable {
-                var _foo: (String, Int) async throws -> String = unimplemented()
+                var _foo: @Sendable (String, Int) async throws -> String = unimplemented()
                 func foo(bar: String, baz: Int) async throws -> String {
                     return try await _foo(bar, baz)
                 }
-                init(foo: @escaping (String, Int) async throws -> String = unimplemented()) {
+                init(foo: @escaping @Sendable (String, Int) async throws -> String = unimplemented()) {
                     self._foo = foo
                 }
             }
@@ -365,11 +365,11 @@ final class DependenciesMacrosTests: XCTestCase {
                 func foo(bar: String, baz: Int) async throws -> String
             }
             public struct MyDependencyMock: MyDependencyProtocol {
-                var _foo: (String, Int) async throws -> String = unimplemented()
+                var _foo: @Sendable (String, Int) async throws -> String = unimplemented()
                 public func foo(bar: String, baz: Int) async throws -> String {
                     return try await _foo(bar, baz)
                 }
-                public init(foo: @escaping (String, Int) async throws -> String = unimplemented()) {
+                public init(foo: @escaping @Sendable (String, Int) async throws -> String = unimplemented()) {
                     self._foo = foo
                 }
             }
