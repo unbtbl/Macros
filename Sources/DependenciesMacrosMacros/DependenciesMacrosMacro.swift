@@ -23,6 +23,20 @@ public struct AutoDependencyMacro {
         declaration.modifiers?.contains(where: { $0.name.text == "public" }) == true
     }
     var dependencyKind: DependencyKind
+    var declarationInheritanceClause: TypeInheritanceClauseSyntax? {
+        if let classDecl = declaration.as(ClassDeclSyntax.self) {
+            return classDecl.inheritanceClause
+        } else if let structDecl = declaration.as(StructDeclSyntax.self) {
+            return structDecl.inheritanceClause
+        } else if let actorDecl = declaration.as(ActorDeclSyntax.self) {
+            return actorDecl.inheritanceClause
+        } else {
+            return nil
+        }
+    }
+    var declarationIsSendable: Bool {
+        declarationInheritanceClause?.inheritedTypeCollection.contains(where: { $0.typeName.as(SimpleTypeIdentifierSyntax.self)?.name.text == "Sendable" }) == true
+    }
 
     init(
         node: AttributeSyntax,
@@ -71,6 +85,11 @@ public struct AutoDependencyMacro {
                 InheritedTypeSyntax(typeName: "AnyObject" as TypeSyntax)
             } else if dependencyKind == .actor {
                 InheritedTypeSyntax(typeName: "AnyActor" as TypeSyntax)
+            }
+
+            // If the declaration is Sendable, add that to the inheritance clause
+            if declarationIsSendable {
+                InheritedTypeSyntax(typeName: "Sendable" as TypeSyntax)
             }
         }
 

@@ -309,4 +309,74 @@ final class DependenciesMacrosTests: XCTestCase {
             macros: DependenciesMacrosPlugin.macros
         )
     }
+
+    func testSendableClass() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            final class MyDependency: Sendable {
+                func foo(bar: String, baz: Int) async throws -> String {
+                    return bar
+                }
+            }
+            """,
+            expandedSource: """
+            final class MyDependency: Sendable {
+                func foo(bar: String, baz: Int) async throws -> String {
+                    return bar
+                }
+            }
+            protocol MyDependencyProtocol : AnyObject, Sendable {
+                func foo(bar: String, baz: Int) async throws -> String
+            }
+            class MyDependencyMock: MyDependencyProtocol {
+                var _foo: (String, Int) async throws -> String = unimplemented()
+                func foo(bar: String, baz: Int) async throws -> String {
+                    return try await _foo(bar, baz)
+                }
+                init(foo: @escaping (String, Int) async throws -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
+
+    func testSendablePublicStruct() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            public struct MyDependency: Sendable {
+                public func foo(bar: String, baz: Int) async throws -> String {
+                    return bar
+                }
+            }
+            """,
+            expandedSource: """
+            public struct MyDependency: Sendable {
+                public func foo(bar: String, baz: Int) async throws -> String {
+                    return bar
+                }
+            }
+            public protocol MyDependencyProtocol : Sendable {
+                func foo(bar: String, baz: Int) async throws -> String
+            }
+            public struct MyDependencyMock: MyDependencyProtocol {
+                var _foo: (String, Int) async throws -> String = unimplemented()
+                public func foo(bar: String, baz: Int) async throws -> String {
+                    return try await _foo(bar, baz)
+                }
+                public init(foo: @escaping (String, Int) async throws -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
 }
