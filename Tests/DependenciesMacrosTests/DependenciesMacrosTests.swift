@@ -204,4 +204,109 @@ final class DependenciesMacrosTests: XCTestCase {
             macros: DependenciesMacrosPlugin.macros
         )
     }
+    
+    func testAsyncFunction() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            final class MyDependency {
+                func foo(bar: String, baz: Int) async -> String {
+                    return bar
+                }
+            }
+            """,
+            expandedSource: """
+            final class MyDependency {
+                func foo(bar: String, baz: Int) async -> String {
+                    return bar
+                }
+            }
+            protocol MyDependencyProtocol : AnyObject {
+                func foo(bar: String, baz: Int) async -> String
+            }
+            class MyDependencyMock: MyDependencyProtocol {
+                var _foo: (String, Int) async -> String = unimplemented()
+                func foo(bar: String, baz: Int) async -> String {
+                    return await _foo(bar, baz)
+                }
+                init(foo: @escaping (String, Int) async -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
+
+    func testThrowingFunction() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            final class MyDependency {
+                func foo(bar: String, baz: Int) throws -> String {
+                    return bar
+                }
+            }
+            """,
+            expandedSource: """
+            final class MyDependency {
+                func foo(bar: String, baz: Int) throws -> String {
+                    return bar
+                }
+            }
+            protocol MyDependencyProtocol : AnyObject {
+                func foo(bar: String, baz: Int) throws -> String
+            }
+            class MyDependencyMock: MyDependencyProtocol {
+                var _foo: (String, Int) throws -> String = unimplemented()
+                func foo(bar: String, baz: Int) throws -> String {
+                    return try _foo(bar, baz)
+                }
+                init(foo: @escaping (String, Int) throws -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
+
+    func testAsyncThrowingFunction() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            final class MyDependency {
+                func foo(bar: String, baz: Int) async throws -> String {
+                    return bar
+                }
+            }
+            """,
+            expandedSource: """
+            final class MyDependency {
+                func foo(bar: String, baz: Int) async throws -> String {
+                    return bar
+                }
+            }
+            protocol MyDependencyProtocol : AnyObject {
+                func foo(bar: String, baz: Int) async throws -> String
+            }
+            class MyDependencyMock: MyDependencyProtocol {
+                var _foo: (String, Int) async throws -> String = unimplemented()
+                func foo(bar: String, baz: Int) async throws -> String {
+                    return try await _foo(bar, baz)
+                }
+                init(foo: @escaping (String, Int) async throws -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
 }

@@ -154,7 +154,26 @@ public struct AutoDependencyMacro {
             signature: funcDecl.signature,
             genericWhereClause: funcDecl.genericWhereClause
         ) {
-            "return \(raw: closureVariableIdentifier)()"
+            let parameters = funcDecl.signature.input.parameterList
+                .map { $0.secondName?.text ?? $0.firstName.text }
+                .joined(separator: ", ")
+
+            let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
+            let isThrowing = funcDecl.signature.effectSpecifiers?.throwsSpecifier != nil
+
+            let closureCall = "\(raw: closureVariableIdentifier)(\(raw: parameters))" as ExprSyntax
+            let fullExpression: ExprSyntax = switch (isAsync, isThrowing) {
+            case (true, true):
+                "try await \(closureCall)"
+            case (true, false):
+                "await \(closureCall)"
+            case (false, true):
+                "try \(closureCall)"
+            case (false, false):
+                closureCall
+            }
+
+            "return \(fullExpression)"
         }
 
         return [
