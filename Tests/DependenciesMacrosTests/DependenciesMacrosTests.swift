@@ -57,6 +57,7 @@ final class DependenciesMacrosTests: XCTestCase {
                     return "bar"
                 }
                 func cantTouchMe() {}
+                var meNeither = 0
             }
             """,
             expandedSource: """
@@ -66,6 +67,7 @@ final class DependenciesMacrosTests: XCTestCase {
                 }
                 func cantTouchMe() {
                 }
+                var meNeither = 0
             }
             public protocol MyDependencyProtocol : AnyObject {
                 func foo() -> String
@@ -86,20 +88,120 @@ final class DependenciesMacrosTests: XCTestCase {
         )
     }
 
-    func testForDumpingSyntaxTree() throws {
+    func testMultipleRequirements() {
         assertMacroExpansion(
             """
-            @DumpSyntax
-            public protocol HenkProtocol {
-                var isAdmin: Bool { get }
-            }
-            @DumpSyntax
-            public class Henk {
-                var implicit = Date(timeIntervalSinceReferenceDate: 200)
+            @AutoDependency
+            final class MyDependency {
+                func foo() -> String {
+                    return "bar"
+                }
+                func bar() -> String {
+                    return "foo"
+                }
             }
             """,
-            expandedSource: "",
-            macros: ["DumpSyntax": DumpSyntaxMacro.self]
+            expandedSource: """
+            final class MyDependency {
+                func foo() -> String {
+                    return "bar"
+                }
+                func bar() -> String {
+                    return "foo"
+                }
+            }
+            protocol MyDependencyProtocol : AnyObject {
+                func foo() -> String
+                func bar() -> String
+            }
+            class MyDependencyMock: MyDependencyProtocol {
+                var _foo: () -> String = unimplemented()
+                func foo() -> String {
+                    return _foo()
+                }
+                var _bar: () -> String = unimplemented()
+                func bar() -> String {
+                    return _bar()
+                }
+                init(foo: @escaping () -> String = unimplemented(), bar: @escaping () -> String = unimplemented()) {
+                    self._foo = foo
+                    self._bar = bar
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
+
+    func testFunctionWithParameter() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            final class MyDependency {
+                func foo(bar: String) -> String {
+                    return bar
+                }
+            }
+            """,
+            expandedSource: """
+            final class MyDependency {
+                func foo(bar: String) -> String {
+                    return bar
+                }
+            }
+            protocol MyDependencyProtocol : AnyObject {
+                func foo(bar: String) -> String
+            }
+            class MyDependencyMock: MyDependencyProtocol {
+                var _foo: (String) -> String = unimplemented()
+                func foo(bar: String) -> String {
+                    return _foo(bar)
+                }
+                init(foo: @escaping (String) -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
+
+    func testFunctionWithMultipleParameters() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            final class MyDependency {
+                func foo(bar: String, baz: Int) -> String {
+                    return bar
+                }
+            }
+            """,
+            expandedSource: """
+            final class MyDependency {
+                func foo(bar: String, baz: Int) -> String {
+                    return bar
+                }
+            }
+            protocol MyDependencyProtocol : AnyObject {
+                func foo(bar: String, baz: Int) -> String
+            }
+            class MyDependencyMock: MyDependencyProtocol {
+                var _foo: (String, Int) -> String = unimplemented()
+                func foo(bar: String, baz: Int) -> String {
+                    return _foo(bar, baz)
+                }
+                init(foo: @escaping (String, Int) -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
         )
     }
 }

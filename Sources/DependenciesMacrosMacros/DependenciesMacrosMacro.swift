@@ -10,7 +10,7 @@ enum DependencyKind {
     case `actor`
 }
 
-public struct AutoDependency {
+public struct AutoDependencyMacro {
     var declaration: DeclGroupSyntax
     var identifier: TokenSyntax
     var protocolName: String {
@@ -201,7 +201,11 @@ public struct AutoDependency {
         return InitializerDeclSyntax(
             modifiers: declarationIsPublic ? [DeclModifierSyntax(name: .keyword(.public))] : nil,
             signature: FunctionSignatureSyntax(
-                input: ParameterClauseSyntax(parameterList: .init(parametersAndCodeBlockItems.map(\.parameter)))
+                input: ParameterClauseSyntax { // We're using the builder here because it automatically inserts commas for us
+                    for (parameter, _) in parametersAndCodeBlockItems {
+                        parameter
+                    }
+                }
             ),
             body: CodeBlockSyntax(statements: CodeBlockItemListSyntax(parametersAndCodeBlockItems.map(\.codeBlockItem)))
         )
@@ -211,13 +215,15 @@ public struct AutoDependency {
         // If the declaration is public, only public members should be included
         if let member = member.as(FunctionDeclSyntax.self), declarationIsPublic {
             return member.modifiers?.contains(where: { $0.name.text == "public" }) == true
+        } else if let member = member.as(VariableDeclSyntax.self), declarationIsPublic {
+            return member.modifiers?.contains(where: { $0.name.text == "public" }) == true
         } else {
             return true
         }
     }
 }
 
-extension AutoDependency: PeerMacro {
+extension AutoDependencyMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
@@ -232,7 +238,7 @@ extension AutoDependency: PeerMacro {
     }
 }
 
-extension AutoDependency: ConformanceMacro {
+extension AutoDependencyMacro: ConformanceMacro {
     public static func expansion(of node: AttributeSyntax, providingConformancesOf declaration: some DeclGroupSyntax, in context: some MacroExpansionContext) throws -> [(TypeSyntax, GenericWhereClauseSyntax?)] {
         let instance = try Self(node: node, declaration: declaration)
 
@@ -282,7 +288,7 @@ extension DependenciesMacroDiagnostic: DiagnosticMessage {
 @main
 public struct DependenciesMacrosPlugin: CompilerPlugin {
     public static let macros: [String: Macro.Type] = [
-        "AutoDependency": AutoDependency.self
+        "AutoDependency": AutoDependencyMacro.self
     ]
 
     public let providingMacros = Array(Self.macros.values)
