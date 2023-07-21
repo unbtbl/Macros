@@ -18,7 +18,7 @@ extension DeclSyntaxProtocol {
 
 extension FunctionDeclSyntax: ProtocolRequirementConvertibleSyntax {
     func asProtocolRequirement() -> DeclSyntaxProtocol {
-        self.with(\.body, nil)
+        self.with(\.body, nil).with(\.modifiers, nil)
     }
 }
 

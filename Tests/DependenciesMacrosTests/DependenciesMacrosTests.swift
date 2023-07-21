@@ -13,7 +13,7 @@ final class DependenciesMacrosTests: XCTestCase {
     // TODO: some return type
     // TODO: Protocol inheritance
 
-    func testMacro() {
+    func testBasicExpansion() {
         assertMacroExpansion(
             """
             @AutoDependency
@@ -38,6 +38,44 @@ final class DependenciesMacrosTests: XCTestCase {
                     return _foo()
                 }
                 init(foo: @escaping () -> String = unimplemented()) {
+                    self._foo = foo
+                }
+            }
+            extension MyDependency: MyDependencyProtocol {
+            }
+            """,
+            macros: DependenciesMacrosPlugin.macros
+        )
+    }
+
+    func testPublicExpansion() {
+        assertMacroExpansion(
+            """
+            @AutoDependency
+            public final class MyDependency {
+                public func foo() -> String {
+                    return "bar"
+                }
+                func cantTouchMe() {}
+            }
+            """,
+            expandedSource: """
+            public final class MyDependency {
+                public func foo() -> String {
+                    return "bar"
+                }
+                func cantTouchMe() {
+                }
+            }
+            public protocol MyDependencyProtocol : AnyObject {
+                func foo() -> String
+            }
+            open class MyDependencyMock: MyDependencyProtocol {
+                var _foo: () -> String = unimplemented()
+                public func foo() -> String {
+                    return _foo()
+                }
+                public init(foo: @escaping () -> String = unimplemented()) {
                     self._foo = foo
                 }
             }

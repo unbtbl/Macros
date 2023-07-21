@@ -19,6 +19,9 @@ public struct AutoDependency {
     var mockName: String {
         "\(identifier.text)Mock"
     }
+    var declarationIsPublic: Bool {
+        declaration.modifiers?.contains(where: { $0.name.text == "public" }) == true
+    }
     var dependencyKind: DependencyKind
 
     init(
@@ -56,7 +59,7 @@ public struct AutoDependency {
 
     func generateProtocol() throws -> ProtocolDeclSyntax {
         let protocolDecl = try ProtocolDeclSyntax("protocol \(raw: protocolName)") {
-            for member in declaration.memberBlock.members {
+            for member in declaration.memberBlock.members where protocolIncludes(member.decl) {
                 if let convertible = member.decl.asProtocol(ProtocolRequirementConvertibleSyntax.self) {
                     try convertible.asProtocolRequirement()
                 }
@@ -73,6 +76,7 @@ public struct AutoDependency {
 
         return protocolDecl
             .with(\.inheritanceClause, inheritanceClause.inheritedTypeCollection.isEmpty ? nil : inheritanceClause)
+            .with(\.modifiers, declarationIsPublic ? [DeclModifierSyntax(name: .keyword(.public))] : nil)
     }
 
     func generateMock() throws -> DeclSyntaxProtocol {
@@ -89,18 +93,21 @@ public struct AutoDependency {
         let decl: DeclSyntaxProtocol = switch dependencyKind {
         case .class:
             ClassDeclSyntax(
+                modifiers: declarationIsPublic ? [DeclModifierSyntax(name: .keyword(.open))] : nil,
                 identifier: .identifier(mockName),
                 inheritanceClause: inheritanceClause,
                 memberBlock: membersBlock
             )
         case .struct:
             StructDeclSyntax(
+                modifiers: declarationIsPublic ? [DeclModifierSyntax(name: .keyword(.public))] : nil,
                 identifier: .identifier(mockName),
                 inheritanceClause: inheritanceClause,
                 memberBlock: membersBlock
             )
         case .actor:
             ActorDeclSyntax(
+                modifiers: declarationIsPublic ? [DeclModifierSyntax(name: .keyword(.public))] : nil,
                 identifier: .identifier(mockName),
                 inheritanceClause: inheritanceClause,
                 memberBlock: membersBlock
@@ -110,37 +117,50 @@ public struct AutoDependency {
         return decl
     }
 
-    @MemberDeclListBuilder
     func mockMembers() throws -> MemberDeclListSyntax {
-        // For each func in the declaration, generate a mock implementation relying on a closure
-        for member in declaration.memberBlock.members {
-            if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
-                let closureVariableIdentifier = "_\(funcDecl.identifier.text)"
-
-                VariableDeclSyntax(
-                    bindingKeyword: .keyword(.var)
-                ) {
-                    PatternBindingSyntax(
-                        pattern: "\(raw: closureVariableIdentifier)" as PatternSyntax,
-                        typeAnnotation: TypeAnnotationSyntax(type: funcDecl.signature.asFunctionType()),
-                        initializer: InitializerClauseSyntax(
-                            value: "unimplemented()" as ExprSyntax
-                        )
-                    )
-                }
-
-                FunctionDeclSyntax(
-                    attributes: funcDecl.attributes,
-                    modifiers: funcDecl.modifiers,
-                    identifier: funcDecl.identifier,
-                    genericParameterClause: funcDecl.genericParameterClause,
-                    signature: funcDecl.signature,
-                    genericWhereClause: funcDecl.genericWhereClause
-                ) {
-                    "return \(raw: closureVariableIdentifier)()"
-                }
+        let members = declaration.memberBlock.members
+            .reduce(into: [DeclSyntaxProtocol]()) { (result, member) in
+                result.append(contentsOf: mockMembers(for: member.decl))
             }
+            .map { MemberDeclListItemSyntax(decl: $0) }
+
+        return MemberDeclListSyntax(members)
+    }
+
+    func mockMembers(for member: some DeclSyntaxProtocol) -> [DeclSyntaxProtocol] {
+        guard let funcDecl = member.as(FunctionDeclSyntax.self), protocolIncludes(member) else {
+            return []
         }
+
+        let closureVariableIdentifier = "_\(funcDecl.identifier.text)"
+        
+        let variableDecl = VariableDeclSyntax(
+            bindingKeyword: .keyword(.var)
+        ) {
+            PatternBindingSyntax(
+                pattern: "\(raw: closureVariableIdentifier)" as PatternSyntax,
+                typeAnnotation: TypeAnnotationSyntax(type: funcDecl.signature.asFunctionType()),
+                initializer: InitializerClauseSyntax(
+                    value: "unimplemented()" as ExprSyntax
+                )
+            )
+        }
+        
+        let functionDecl = FunctionDeclSyntax(
+            attributes: funcDecl.attributes,
+            modifiers: declarationIsPublic ? [DeclModifierSyntax(name: .keyword(.public))] : nil,
+            identifier: funcDecl.identifier,
+            genericParameterClause: funcDecl.genericParameterClause,
+            signature: funcDecl.signature,
+            genericWhereClause: funcDecl.genericWhereClause
+        ) {
+            "return \(raw: closureVariableIdentifier)()"
+        }
+
+        return [
+            variableDecl,
+            functionDecl
+        ]
     }
 
     func initializer<S: Sequence>(for members: S) -> InitializerDeclSyntax where S.Element: DeclSyntaxProtocol {
@@ -179,11 +199,21 @@ public struct AutoDependency {
             }
 
         return InitializerDeclSyntax(
+            modifiers: declarationIsPublic ? [DeclModifierSyntax(name: .keyword(.public))] : nil,
             signature: FunctionSignatureSyntax(
                 input: ParameterClauseSyntax(parameterList: .init(parametersAndCodeBlockItems.map(\.parameter)))
             ),
             body: CodeBlockSyntax(statements: CodeBlockItemListSyntax(parametersAndCodeBlockItems.map(\.codeBlockItem)))
         )
+    }
+
+    func protocolIncludes(_ member: some DeclSyntaxProtocol) -> Bool {
+        // If the declaration is public, only public members should be included
+        if let member = member.as(FunctionDeclSyntax.self), declarationIsPublic {
+            return member.modifiers?.contains(where: { $0.name.text == "public" }) == true
+        } else {
+            return true
+        }
     }
 }
 
