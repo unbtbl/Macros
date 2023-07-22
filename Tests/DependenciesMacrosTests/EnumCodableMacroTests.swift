@@ -20,13 +20,10 @@ final class EnumCodableMacroTests: XCTestCase {
                 case user(user: User)
                 case admin(user: Admin)
                 enum SubType: String, Codable {
-                    case admin
-                    case nobody
-                    case user
+                    case nobody, user, admin
                 }
                 private enum CodingKeys: String, CodingKey {
-                    case type
-                    case user
+                    case type, user
                 }
                 public func encode(to encoder: Encoder) throws {
                     var container = encoder.container(keyedBy: CodingKeys.self)
@@ -39,6 +36,20 @@ final class EnumCodableMacroTests: XCTestCase {
                     case .admin(let user):
                         try container.encode(SubType.admin, forKey: .type)
                         try container.encode(user, forKey: .user)
+                    }
+                }
+                public init(from decoder: Decoder) throws {
+                    let container = try decoder.container(keyedBy: CodingKeys.self)
+                    let subtype = try container.decode(SubType.self, forKey: .type)
+                    switch subtype {
+                    case .nobody:
+                        self = .nobody
+                    case .user:
+                        let user = try container.decode(User.self, forKey: .user)
+                        self = .user(user: user)
+                    case .admin:
+                        let user = try container.decode(Admin.self, forKey: .user)
+                        self = .admin(user: user)
                     }
                 }
             }

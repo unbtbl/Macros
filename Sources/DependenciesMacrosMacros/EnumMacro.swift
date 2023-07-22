@@ -40,7 +40,14 @@ internal struct EnumCase {
         return TupleExprSyntax {
             TupleExprElementListSyntax {
                 for associatedValue in associatedValues {
-                    TupleExprElementSyntax(expression: IdentifierExprSyntax(identifier: associatedValue.firstName))
+                    TupleExprElementSyntax(
+                        expression: UnresolvedPatternExprSyntax(
+                            pattern: ValueBindingPatternSyntax(
+                                bindingKeyword: .keyword(.let), 
+                                valuePattern: IdentifierPatternSyntax(identifier: associatedValue.firstName)
+                            )
+                        )
+                    )
                 }
             }
         }
@@ -111,20 +118,20 @@ public struct EnumCodableMacro: MemberMacro {
     }
 
     func generateCodingKeysEnum(context: some MacroExpansionContext) -> EnumDeclSyntax {
-        let uniqueAssociatedValues = self.cases.reduce(into: Set<TokenSyntax>()) { codingKeys, enumCase in
+        let uniqueAssociatedValues = self.cases.reduce(into: Set<String>()) { codingKeys, enumCase in
             if let associatedValues = enumCase.associatedValues {
                 for associatedValue in associatedValues {
-                    codingKeys.insert(associatedValue.firstName)
+                    codingKeys.insert(associatedValue.firstName.text)
                 }
             }
         }
 
         return try! EnumDeclSyntax("private enum CodingKeys: String, CodingKey") {
-            MemberDeclListItemSyntax(decl: EnumCaseDeclSyntax {
+            try MemberDeclListItemSyntax(decl: EnumCaseDeclSyntax {
                 EnumCaseElementSyntax(identifier: "type")
 
                 for associatedValue in uniqueAssociatedValues {
-                    EnumCaseElementSyntax(identifier: associatedValue)
+                    try EnumCaseElementSyntax(identifier: TokenSyntax(validating: .identifier(associatedValue)))
                 }
             })
         }
@@ -136,7 +143,9 @@ public struct EnumCodableMacro: MemberMacro {
                 if let tupleExpression = enumCase.tupleExpression {
                     CaseItemSyntax(pattern: ExpressionPatternSyntax(expression: FunctionCallExprSyntax(
                         calledExpression: MemberAccessExprSyntax(name: enumCase.identifier),
-                        argumentList: tupleExpression.elementList
+                        leftParen: .leftParenToken(),
+                        argumentList: tupleExpression.elementList,
+                        rightParen: .rightParenToken()
                     )))
                 } else {
                     CaseItemSyntax(pattern: ExpressionPatternSyntax(expression: MemberAccessExprSyntax(name: enumCase.identifier)))
@@ -165,7 +174,48 @@ public struct EnumCodableMacro: MemberMacro {
         }
     }
 
-    func generateDecodeFunction(
+    func generateDecodeInitializer(context: some MacroExpansionContext) -> InitializerDeclSyntax {
+        let decodeCases = self.cases.map { enumCase -> SwitchCaseSyntax in
+            let decodeLabel = SwitchCaseLabelSyntax {
+                CaseItemSyntax(pattern: ExpressionPatternSyntax(expression: MemberAccessExprSyntax(name: enumCase.identifier)))
+            }
+
+            var decodeStatements = [CodeBlockItemSyntax]()
+            
+            if let associatedValues = enumCase.associatedValues {
+                var caseWrap = ""
+                var cases = [String]()
+
+                for associatedValue in associatedValues {
+                    decodeStatements.append("let \(associatedValue.firstName) = try container.decode(\(associatedValue.type).self, forKey: .\(associatedValue.firstName))")
+                    cases.append("\(associatedValue.firstName): \(associatedValue.firstName)")
+                }
+
+                caseWrap.append("(")
+                caseWrap.append(cases.joined(separator: ", "))
+                caseWrap.append(")")
+                decodeStatements.append("self = .\(enumCase.identifier)\(raw: caseWrap)")
+            } else {
+                decodeStatements.append("self = .\(enumCase.identifier)")
+            }
+
+            return SwitchCaseSyntax(
+                label: .case(decodeLabel), 
+                statements: CodeBlockItemListSyntax(decodeStatements)
+            )
+        }
+
+        return try! InitializerDeclSyntax("public init(from decoder: Decoder) throws") {
+            "let container = try decoder.container(keyedBy: CodingKeys.self)"
+            "let subtype = try container.decode(SubType.self, forKey: .type)"
+
+            SwitchExprSyntax(expression: "subtype" as ExprSyntax) {
+                for decodeCase in decodeCases {
+                    decodeCase
+                }
+            }
+        }
+    }
     
     public static func expansion(
         of node: AttributeSyntax,
@@ -191,127 +241,17 @@ public struct EnumCodableMacro: MemberMacro {
             return EnumCase(enumCase, in: context)
         }
 
-        var encodeCases = [SwitchCaseSyntax]()
-        var decodeCases = [SwitchCaseSyntax]()
-        var decode = ""
-        var codingKeys = Set<TokenSyntax>()
-        var subtypes = Set<TokenSyntax>()
-        codingKeys.insert("type")
 
-        for enumCase in enumCases {
-            subtypes.insert(enumCase.identifier)
-
-            var caseUnwrap = ""
-
-            if let associatedValues = enumCase.associatedValues {
-                var cases = [String]()
-                for associatedValue in associatedValues {
-                    codingKeys.insert(associatedValue.firstName)
-                    cases.append("let \(associatedValue.firstName)")
-                }
-
-                caseUnwrap.append("(")
-                caseUnwrap.append(cases.joined(separator: ", "))
-                caseUnwrap.append(")")
-            }
-
-            let encodeLabel = SwitchCaseLabelSyntax {
-                if let tupleExpression = enumCase.tupleExpression {
-                    CaseItemSyntax(pattern: ExpressionPatternSyntax(expression: FunctionCallExprSyntax(
-                        calledExpression: MemberAccessExprSyntax(name: enumCase.identifier),
-                        argumentList: tupleExpression.elementList
-                    )))
-                } else {
-                    CaseItemSyntax(pattern: ExpressionPatternSyntax(expression: MemberAccessExprSyntax(name: enumCase.identifier)))
-                }
-            }
-
-            encodeCases.append(SwitchCaseSyntax(label: .case(encodeLabel), statements: CodeBlockItemListSyntax {
-                "try container.encode(SubType.\(enumCase.identifier), forKey: .type)"
-
-                if let associatedValues = enumCase.associatedValues {
-                    for associatedValue in associatedValues {
-                        "try container.encode(\(associatedValue.firstName), forKey: .\(associatedValue.firstName))"
-                    }
-                }
-            }))
-
-            decode += """
-            case .\(IdentifierExprSyntax(identifier: enumCase.identifier)):
-            """
-
-            if let associatedValues = enumCase.associatedValues {
-                var caseWrap = ""
-                var cases = [String]()
-
-                for associatedValue in associatedValues {
-                    decode += """
-                    let \(associatedValue.firstName) = try container.decode(\(associatedValue.type).self, forKey: .\(associatedValue.firstName))
-                    """
-
-                    cases.append("\(associatedValue.firstName): \(associatedValue.firstName)")
-                }
-
-                caseWrap.append("(")
-                caseWrap.append(cases.joined(separator: ", "))
-                caseWrap.append(")")
-                decode += """
-                self = .\(enumCase.identifier)\(caseWrap)
-                """
-            } else {
-                decode += """
-                self = .\(enumCase.identifier)
-                """
-            }
-        }
-
-        let codingKeysCases = codingKeys.sorted(by: { $0.text > $1.text }).map { key in
-            return EnumCaseDeclSyntax(elements: EnumCaseElementListSyntax {
-                EnumCaseElementSyntax(identifier: key)
-            })
-        }
-
-        let codingKeysDecl = EnumDeclSyntax("""
-        private enum CodingKeys: String, CodingKey {
-            \(raw: codingKeysCases)
-        }
-        """ as DeclSyntax)!
-
-        let subtypeText = subtypes.sorted(by: { $0.text > $1.text }).map { subtype in
-            return "case \(subtype)"
-        }.joined(separator: "\n")
-
-        let subtypeDecl = EnumDeclSyntax("""
-        enum SubType: String, Codable {
-            \(raw: subtypeText)
-        }
-        """ as DeclSyntax)!
-
-        let encodeSwitch = SwitchExprSyntax(expression: IdentifierExprSyntax(identifier: "self"), cases: SwitchCaseListSyntax(encodeCases.map { .switchCase($0) }))
-        let encodeDecl = FunctionDeclSyntax("""
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-
-            \(encodeSwitch)
-        }
-        """ as DeclSyntax)!
-
-        let decodeDecl = InitializerDeclSyntax("""
-        public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            let subtype = try container.decode(SubType.self, forKey: .type)
-
-            switch subtype {
-            \(raw: decode)
-            }
-        }
-        """ as DeclSyntax)!
+        let macro = EnumCodableMacro(
+            declaration: declaration,
+            cases: enumCases
+        )
 
         return [
-            subtypeDecl.as(DeclSyntax.self),
-            codingKeysDecl.as(DeclSyntax.self),
-            encodeDecl.as(DeclSyntax.self),
-            decodeDecl.as(DeclSyntax.self),
+            macro.generateSubTypeEnum(context: context).as(DeclSyntax.self),
+            macro.generateCodingKeysEnum(context: context).as(DeclSyntax.self),
+            macro.generateEncodeFunction(context: context).as(DeclSyntax.self),
+            macro.generateDecodeInitializer(context: context).as(DeclSyntax.self),
         ]
     }
 }
