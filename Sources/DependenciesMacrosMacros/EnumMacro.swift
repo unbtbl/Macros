@@ -26,7 +26,7 @@ struct MissingEnumCaseLabelDiagnosticMessage: DiagnosticMessage, Error {
 internal struct EnumCase {
     struct AssociatedValue {
         let firstName: TokenSyntax
-        let type: TokenSyntax
+        let type: String
     }
 
     let identifier: TokenSyntax
@@ -60,9 +60,10 @@ internal struct EnumCase {
 
         return TupleTypeElementListSyntax {
             for associatedValue in associatedValues {
+                let syntax = "\(raw: associatedValue.firstName.text): \(raw: associatedValue.type)" as TokenSyntax
                 TupleTypeElementSyntax(
                     name: associatedValue.firstName,
-                    type: SimpleTypeIdentifierSyntax(name: associatedValue.type)
+                    type: "\(raw: associatedValue.type)" as TypeSyntax
                 )
             }
         }
@@ -77,14 +78,7 @@ internal struct EnumCase {
 
         self.identifier = caseElement.identifier
         self.associatedValues = try? caseElement.associatedValue?.parameterList.map { parameter in
-            guard let typeName = parameter.type.as(SimpleTypeIdentifierSyntax.self)?.name else {
-                let error = UnsuportedTypeDiagnosticMessage()
-                context.diagnose(Diagnostic(
-                    node: parameter._syntaxNode,
-                    message: error
-                ))
-                throw UnsuportedTypeDiagnosticMessage()
-            }
+            let typeName = parameter.type.description
 
             guard let firstName = parameter.firstName else {
                 let error = MissingEnumCaseLabelDiagnosticMessage()
@@ -187,7 +181,7 @@ public struct EnumCodableMacro: MemberMacro {
                 var cases = [String]()
 
                 for associatedValue in associatedValues {
-                    decodeStatements.append("let \(associatedValue.firstName) = try container.decode(\(associatedValue.type).self, forKey: .\(associatedValue.firstName))")
+                    decodeStatements.append("let \(associatedValue.firstName) = try container.decode(\(raw: associatedValue.type).self, forKey: .\(associatedValue.firstName))")
                     cases.append("\(associatedValue.firstName): \(associatedValue.firstName)")
                 }
 
