@@ -249,17 +249,6 @@ extension DependenciesMacroDiagnostic: DiagnosticMessage {
     }
 }
 
-@main
-public struct DependenciesMacrosPlugin: CompilerPlugin {
-    public static let macros: [String: Macro.Type] = [
-        "AutoDependency": AutoDependency.self
-    ]
-
-    public let providingMacros = Array(Self.macros.values)
-
-    public init() {}
-}
-
 struct DumpSyntaxMacro: PeerMacro {
     static func expansion(of node: AttributeSyntax, providingPeersOf declaration: some DeclSyntaxProtocol, in context: some MacroExpansionContext) throws -> [DeclSyntax] {
         dump(declaration)

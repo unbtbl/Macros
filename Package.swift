@@ -13,14 +13,10 @@ let package = Package(
             name: "DependenciesMacros",
             targets: ["DependenciesMacros"]
         ),
-        .executable(
-            name: "DependenciesMacrosClient",
-            targets: ["DependenciesMacrosClient"]
-        ),
     ],
     dependencies: [
         // Depend on the latest Swift 5.9 prerelease of SwiftSyntax
-        .package(url: "https://github.com/apple/swift-syntax.git", from: "509.0.0-swift-5.9-DEVELOPMENT-SNAPSHOT-2023-04-25-b"),
+        .package(url: "https://github.com/apple/swift-syntax.git", revision: "swift-5.9-DEVELOPMENT-SNAPSHOT-2023-07-10-a"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies.git", from: "0.5.1")
     ],
     targets: [
